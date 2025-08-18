@@ -31,17 +31,82 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
     },
   });
 
+  const updateSetsMutation = useMutation({
+    mutationFn: async (data: { sets: any[]; currentSet: number; homeScore: number; awayScore: number }) => {
+      // First update the sets
+      await apiRequest("PATCH", `/api/games/${gameId}/sets`, { sets: data.sets });
+      // Then update the score and current set
+      const response = await apiRequest("PATCH", `/api/games/${gameId}/score`, { 
+        homeScore: data.homeScore, 
+        awayScore: data.awayScore, 
+        currentSet: data.currentSet 
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/games', gameId] });
+      toast({
+        title: "Set Complete!",
+        description: "Moving to next set",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to complete set",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const checkSetWin = (homeScore: number, awayScore: number) => {
+    // Win condition: reach 25 points and be at least 2 points ahead
+    // If tied at 24-24 or higher, need to win by 2
+    const minWinScore = 25;
+    const minLead = 2;
+    
+    if (homeScore >= minWinScore && homeScore - awayScore >= minLead) {
+      return 'home';
+    }
+    if (awayScore >= minWinScore && awayScore - homeScore >= minLead) {
+      return 'away';
+    }
+    return null;
+  };
+
   const handleAddPoint = (teamType: 'home' | 'away') => {
     if (!game) return;
     
     const newHomeScore = teamType === 'home' ? game.homeScore + 1 : game.homeScore;
     const newAwayScore = teamType === 'away' ? game.awayScore + 1 : game.awayScore;
     
-    updateScoreMutation.mutate({
-      homeScore: newHomeScore,
-      awayScore: newAwayScore,
-      currentSet: game.currentSet,
-    });
+    // Check if this point wins the set
+    const setWinner = checkSetWin(newHomeScore, newAwayScore);
+    
+    if (setWinner) {
+      // End the current set and move to next set
+      const newSets = [...(Array.isArray(game.sets) ? game.sets : [])];
+      newSets[game.currentSet - 1] = {
+        homeScore: newHomeScore,
+        awayScore: newAwayScore,
+        completed: true,
+      };
+      
+      // Update sets and move to next set (if not game over)
+      updateSetsMutation.mutate({
+        sets: newSets,
+        currentSet: game.currentSet < 5 ? game.currentSet + 1 : game.currentSet,
+        homeScore: game.currentSet < 5 ? 0 : newHomeScore,
+        awayScore: game.currentSet < 5 ? 0 : newAwayScore,
+      });
+    } else {
+      // Just update the score
+      updateScoreMutation.mutate({
+        homeScore: newHomeScore,
+        awayScore: newAwayScore,
+        currentSet: game.currentSet,
+      });
+    }
   };
 
   if (!game) return null;
@@ -110,15 +175,15 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
             <h3 className="font-bold text-gray-800">Quick Actions</h3>
             <Button
               onClick={() => handleAddPoint('home')}
-              disabled={updateScoreMutation.isPending}
-              className="w-full bg-success text-white hover:bg-green-600"
+              disabled={updateScoreMutation.isPending || updateSetsMutation.isPending}
+              className="w-full bg-primary text-white hover:bg-green-600"
             >
               <Plus className="mr-2 h-4 w-4" />
               {game.homeTeamName} +1
             </Button>
             <Button
               onClick={() => handleAddPoint('away')}
-              disabled={updateScoreMutation.isPending}
+              disabled={updateScoreMutation.isPending || updateSetsMutation.isPending}
               className="w-full bg-secondary text-white hover:bg-orange-600"
             >
               <Plus className="mr-2 h-4 w-4" />
