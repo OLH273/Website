@@ -14,7 +14,7 @@ interface LiveScoreboardProps {
 export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const [lastAction, setLastAction] = useState<{
+  const [actionHistory, setActionHistory] = useState<{
     type: 'score' | 'set';
     previousState: {
       homeScore: number;
@@ -22,7 +22,7 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
       currentSet: number;
       sets: any[];
     };
-  } | null>(null);
+  }[]>([]);
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { homeScore: number; awayScore: number; currentSet: number }) => {
@@ -83,7 +83,8 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/games', gameId] });
-      setLastAction(null); // Clear undo history after successful undo
+      // Remove the last action from history
+      setActionHistory(prev => prev.slice(0, -1));
       toast({
         title: "Undone",
         description: "Last action has been undone",
@@ -131,8 +132,21 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
     return wouldEndGame ? "End Game" : "End Set";
   };
 
+  const isGameOver = () => {
+    if (!game) return false;
+    const sets = Array.isArray(game.sets) ? game.sets : [];
+    const homeSetsWon = sets.filter((set: any) => 
+      set.completed && set.homeScore > set.awayScore
+    ).length;
+    const awaySetsWon = sets.filter((set: any) => 
+      set.completed && set.awayScore > set.homeScore
+    ).length;
+    
+    return game.status === 'ended' || homeSetsWon >= 3 || awaySetsWon >= 3;
+  };
+
   const handleAddPoint = (teamType: 'home' | 'away') => {
-    if (!game) return;
+    if (!game || isGameOver()) return;
     
     // Store current state before making changes
     const previousState = {
@@ -158,24 +172,46 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
       };
       
       // Store undo state for set completion
-      setLastAction({
+      setActionHistory(prev => [...prev, {
         type: 'set',
         previousState,
-      });
+      }]);
       
-      // Update sets and move to next set (if not game over)
-      updateSetsMutation.mutate({
-        sets: newSets,
-        currentSet: game.currentSet < 5 ? game.currentSet + 1 : game.currentSet,
-        homeScore: game.currentSet < 5 ? 0 : newHomeScore,
-        awayScore: game.currentSet < 5 ? 0 : newAwayScore,
-      });
+      // Check if game should end after this set
+      const homeSetsWon = newSets.filter((set: any) => 
+        set.completed && set.homeScore > set.awayScore
+      ).length;
+      const awaySetsWon = newSets.filter((set: any) => 
+        set.completed && set.awayScore > set.homeScore
+      ).length;
+      
+      const gameOver = game.currentSet >= 5 || homeSetsWon >= 3 || awaySetsWon >= 3;
+      
+      if (gameOver) {
+        // End the game
+        updateSetsMutation.mutate({
+          sets: newSets,
+          currentSet: game.currentSet,
+          homeScore: newHomeScore,
+          awayScore: newAwayScore,
+        });
+        // End the game status
+        apiRequest("PATCH", `/api/games/${gameId}/end`, {});
+      } else {
+        // Move to next set
+        updateSetsMutation.mutate({
+          sets: newSets,
+          currentSet: game.currentSet + 1,
+          homeScore: 0,
+          awayScore: 0,
+        });
+      }
     } else {
       // Store undo state for regular score
-      setLastAction({
+      setActionHistory(prev => [...prev, {
         type: 'score',
         previousState,
-      });
+      }]);
       
       // Just update the score
       updateScoreMutation.mutate({
@@ -187,12 +223,13 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
   };
 
   const handleUndo = () => {
-    if (!lastAction) return;
+    if (actionHistory.length === 0) return;
+    const lastAction = actionHistory[actionHistory.length - 1];
     undoMutation.mutate(lastAction.previousState);
   };
 
   const handleEndSet = () => {
-    if (!game) return;
+    if (!game || isGameOver()) return;
     
     // Store current state for undo
     const previousState = {
@@ -211,10 +248,10 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
     };
     
     // Store undo state
-    setLastAction({
+    setActionHistory(prev => [...prev, {
       type: 'set',
       previousState,
-    });
+    }]);
     
     // Check if game should end (after 5 sets or if one team won 3 sets)
     const homeSetsWon = newSets.filter(set => 
@@ -234,6 +271,8 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
         homeScore: game.homeScore,
         awayScore: game.awayScore,
       });
+      // End the game status
+      apiRequest("PATCH", `/api/games/${gameId}/end`, {});
     } else {
       // Move to next set
       updateSetsMutation.mutate({
@@ -311,37 +350,43 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
             <h3 className="font-bold text-gray-800">Quick Actions</h3>
             <Button
               onClick={() => handleAddPoint('home')}
-              disabled={updateScoreMutation.isPending || updateSetsMutation.isPending}
-              className="w-full bg-primary text-white hover:bg-green-600"
+              disabled={isGameOver() || updateScoreMutation.isPending || updateSetsMutation.isPending}
+              className="w-full bg-primary text-white hover:bg-green-600 disabled:opacity-50"
             >
               <Plus className="mr-2 h-4 w-4" />
               {game.homeTeamName} +1
             </Button>
             <Button
               onClick={() => handleAddPoint('away')}
-              disabled={updateScoreMutation.isPending || updateSetsMutation.isPending}
-              className="w-full bg-secondary text-white hover:bg-orange-600"
+              disabled={isGameOver() || updateScoreMutation.isPending || updateSetsMutation.isPending}
+              className="w-full bg-secondary text-white hover:bg-orange-600 disabled:opacity-50"
             >
               <Plus className="mr-2 h-4 w-4" />
               {game.awayTeamName} +1
             </Button>
             <Button
               onClick={handleUndo}
-              disabled={!lastAction || undoMutation.isPending}
+              disabled={actionHistory.length === 0 || undoMutation.isPending}
               variant="outline"
               className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
               <Undo className="mr-2 h-4 w-4" />
-              {undoMutation.isPending ? "Undoing..." : "Undo Last"}
+              {undoMutation.isPending ? "Undoing..." : `Undo Last (${actionHistory.length})`}
             </Button>
             <Button
               onClick={handleEndSet}
-              disabled={updateSetsMutation.isPending}
+              disabled={isGameOver() || updateSetsMutation.isPending}
               className="w-full bg-warning text-white hover:bg-yellow-600 disabled:opacity-50"
             >
               <SquareCheck className="mr-2 h-4 w-4" />
               {getEndSetButtonText()}
             </Button>
+            {isGameOver() && (
+              <div className="p-3 bg-gray-100 rounded-lg text-center">
+                <p className="font-bold text-gray-800">Game Ended</p>
+                <p className="text-sm text-gray-600">No more scoring allowed</p>
+              </div>
+            )}
           </div>
         </div>
       </CardContent>
