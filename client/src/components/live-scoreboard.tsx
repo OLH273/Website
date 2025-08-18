@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
@@ -13,6 +14,15 @@ interface LiveScoreboardProps {
 export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [lastAction, setLastAction] = useState<{
+    type: 'score' | 'set';
+    previousState: {
+      homeScore: number;
+      awayScore: number;
+      currentSet: number;
+      sets: any[];
+    };
+  } | null>(null);
 
   const updateScoreMutation = useMutation({
     mutationFn: async (data: { homeScore: number; awayScore: number; currentSet: number }) => {
@@ -59,6 +69,35 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
     },
   });
 
+  const undoMutation = useMutation({
+    mutationFn: async (previousState: { homeScore: number; awayScore: number; currentSet: number; sets: any[] }) => {
+      // First update sets if needed
+      await apiRequest("PATCH", `/api/games/${gameId}/sets`, { sets: previousState.sets });
+      // Then update the score and current set
+      const response = await apiRequest("PATCH", `/api/games/${gameId}/score`, { 
+        homeScore: previousState.homeScore, 
+        awayScore: previousState.awayScore, 
+        currentSet: previousState.currentSet 
+      });
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/games', gameId] });
+      setLastAction(null); // Clear undo history after successful undo
+      toast({
+        title: "Undone",
+        description: "Last action has been undone",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to undo last action",
+        variant: "destructive",
+      });
+    },
+  });
+
   const checkSetWin = (homeScore: number, awayScore: number) => {
     // Win condition: reach 25 points and be at least 2 points ahead
     // If tied at 24-24 or higher, need to win by 2
@@ -77,6 +116,14 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
   const handleAddPoint = (teamType: 'home' | 'away') => {
     if (!game) return;
     
+    // Store current state before making changes
+    const previousState = {
+      homeScore: game.homeScore,
+      awayScore: game.awayScore,
+      currentSet: game.currentSet,
+      sets: Array.isArray(game.sets) ? [...game.sets] : [],
+    };
+    
     const newHomeScore = teamType === 'home' ? game.homeScore + 1 : game.homeScore;
     const newAwayScore = teamType === 'away' ? game.awayScore + 1 : game.awayScore;
     
@@ -92,6 +139,12 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
         completed: true,
       };
       
+      // Store undo state for set completion
+      setLastAction({
+        type: 'set',
+        previousState,
+      });
+      
       // Update sets and move to next set (if not game over)
       updateSetsMutation.mutate({
         sets: newSets,
@@ -100,6 +153,12 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
         awayScore: game.currentSet < 5 ? 0 : newAwayScore,
       });
     } else {
+      // Store undo state for regular score
+      setLastAction({
+        type: 'score',
+        previousState,
+      });
+      
       // Just update the score
       updateScoreMutation.mutate({
         homeScore: newHomeScore,
@@ -107,6 +166,11 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
         currentSet: game.currentSet,
       });
     }
+  };
+
+  const handleUndo = () => {
+    if (!lastAction) return;
+    undoMutation.mutate(lastAction.previousState);
   };
 
   if (!game) return null;
@@ -190,11 +254,13 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
               {game.awayTeamName} +1
             </Button>
             <Button
+              onClick={handleUndo}
+              disabled={!lastAction || undoMutation.isPending}
               variant="outline"
-              className="w-full border-gray-300 text-gray-700 hover:bg-gray-50"
+              className="w-full border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             >
               <Undo className="mr-2 h-4 w-4" />
-              Undo Last
+              {undoMutation.isPending ? "Undoing..." : "Undo Last"}
             </Button>
             <Button
               className="w-full bg-warning text-white hover:bg-yellow-600"
