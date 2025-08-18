@@ -40,6 +40,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch("/api/games/:id/score", async (req, res) => {
     try {
+      console.log("Score update request body:", req.body);
       const { homeScore, awayScore, currentSet } = z.object({
         homeScore: z.number().min(0),
         awayScore: z.number().min(0),
@@ -52,7 +53,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       res.json(game);
     } catch (error) {
-      res.status(400).json({ message: "Invalid score data" });
+      console.error("Score update error:", error);
+      res.status(400).json({ message: "Invalid score data", error: error instanceof Error ? error.message : String(error) });
     }
   });
 

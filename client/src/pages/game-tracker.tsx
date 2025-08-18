@@ -18,7 +18,7 @@ export default function GameTracker() {
     enabled: !!gameId,
   });
 
-  const { data: players } = useQuery({
+  const { data: players = [] } = useQuery({
     queryKey: ['/api/games', gameId, 'players'],
     enabled: !!gameId,
   });
@@ -73,14 +73,14 @@ export default function GameTracker() {
                 gameId={gameId}
                 teamType="home"
                 teamName={game?.homeTeamName || "Home Team"}
-                players={players?.filter((p: any) => p.teamType === 'home') || []}
+                players={players.filter((p: any) => p.teamType === 'home')}
                 onAddPlayer={() => handleAddPlayer('home')}
               />
               <PlayerRoster
                 gameId={gameId}
                 teamType="away"
                 teamName={game?.awayTeamName || "Away Team"}
-                players={players?.filter((p: any) => p.teamType === 'away') || []}
+                players={players.filter((p: any) => p.teamType === 'away')}
                 onAddPlayer={() => handleAddPlayer('away')}
               />
             </div>
@@ -88,7 +88,7 @@ export default function GameTracker() {
             <GameSummary 
               gameId={gameId}
               game={game}
-              players={players || []}
+              players={players}
             />
           </>
         )}
