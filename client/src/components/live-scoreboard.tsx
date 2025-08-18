@@ -113,6 +113,24 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
     return null;
   };
 
+  const getEndSetButtonText = () => {
+    if (!game) return "End Set";
+    if (updateSetsMutation.isPending) return "Ending Set...";
+    
+    // Check if this would end the game
+    const currentSets = Array.isArray(game.sets) ? game.sets : [];
+    const homeSetsWon = currentSets.filter((set: any) => 
+      set.completed && set.homeScore > set.awayScore
+    ).length;
+    const awaySetsWon = currentSets.filter((set: any) => 
+      set.completed && set.awayScore > set.homeScore
+    ).length;
+    
+    const wouldEndGame = game.currentSet >= 5 || homeSetsWon >= 2 || awaySetsWon >= 2;
+    
+    return wouldEndGame ? "End Game" : "End Set";
+  };
+
   const handleAddPoint = (teamType: 'home' | 'away') => {
     if (!game) return;
     
@@ -171,6 +189,60 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
   const handleUndo = () => {
     if (!lastAction) return;
     undoMutation.mutate(lastAction.previousState);
+  };
+
+  const handleEndSet = () => {
+    if (!game) return;
+    
+    // Store current state for undo
+    const previousState = {
+      homeScore: game.homeScore,
+      awayScore: game.awayScore,
+      currentSet: game.currentSet,
+      sets: Array.isArray(game.sets) ? [...game.sets] : [],
+    };
+    
+    // Complete current set with current scores
+    const newSets = [...(Array.isArray(game.sets) ? game.sets : [])];
+    newSets[game.currentSet - 1] = {
+      homeScore: game.homeScore,
+      awayScore: game.awayScore,
+      completed: true,
+    };
+    
+    // Store undo state
+    setLastAction({
+      type: 'set',
+      previousState,
+    });
+    
+    // Check if game should end (after 5 sets or if one team won 3 sets)
+    const homeSetsWon = newSets.filter(set => 
+      set.completed && set.homeScore > set.awayScore
+    ).length;
+    const awaySetsWon = newSets.filter(set => 
+      set.completed && set.awayScore > set.homeScore
+    ).length;
+    
+    const gameOver = game.currentSet >= 5 || homeSetsWon >= 3 || awaySetsWon >= 3;
+    
+    if (gameOver) {
+      // End the game
+      updateSetsMutation.mutate({
+        sets: newSets,
+        currentSet: game.currentSet,
+        homeScore: game.homeScore,
+        awayScore: game.awayScore,
+      });
+    } else {
+      // Move to next set
+      updateSetsMutation.mutate({
+        sets: newSets,
+        currentSet: game.currentSet + 1,
+        homeScore: 0,
+        awayScore: 0,
+      });
+    }
   };
 
   if (!game) return null;
@@ -263,10 +335,12 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
               {undoMutation.isPending ? "Undoing..." : "Undo Last"}
             </Button>
             <Button
-              className="w-full bg-warning text-white hover:bg-yellow-600"
+              onClick={handleEndSet}
+              disabled={updateSetsMutation.isPending}
+              className="w-full bg-warning text-white hover:bg-yellow-600 disabled:opacity-50"
             >
               <SquareCheck className="mr-2 h-4 w-4" />
-              End Set
+              {getEndSetButtonText()}
             </Button>
           </div>
         </div>

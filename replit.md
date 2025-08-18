@@ -35,7 +35,7 @@ Preferred communication style: Simple, everyday language.
 
 ### Component Architecture
 - **Game Setup**: Initial game creation with team name configuration
-- **Live Scoreboard**: Real-time score tracking with automatic set completion logic, volleyball scoring rules, and undo functionality
+- **Live Scoreboard**: Real-time score tracking with automatic set completion logic, volleyball scoring rules, undo functionality, and manual set ending controls
 - **Player Roster**: Dynamic player management with position tracking and jersey numbers
 - **Statistics Tracking**: Individual player performance metrics with increment/decrement controls
 - **Game Summary**: End-game statistics export and game state management
