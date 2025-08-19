@@ -330,7 +330,7 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
                         : 'bg-gray-50 border border-dashed border-gray-300'
                     }`}
                   >
-                    <div className={`font-medium ${isCurrentSet ? 'text-primary' : isCompleted ? '' : 'text-gray-400'}`}>
+                    <div className="font-medium text-[#000000]">
                       Set {setNum}
                     </div>
                     <div className={`font-bold ${isCurrentSet ? 'text-primary' : isCompleted ? 'text-primary' : 'text-gray-400'}`}>
