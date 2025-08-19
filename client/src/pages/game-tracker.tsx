@@ -42,7 +42,7 @@ export default function GameTracker() {
   return (
     <div className="min-h-screen bg-gray-50 font-roboto">
       {/* Header */}
-      <header className="bg-primary text-white shadow-lg">
+      <header className="text-white shadow-lg bg-[#1a7bee]">
         <div className="container mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold flex items-center">
@@ -60,7 +60,6 @@ export default function GameTracker() {
           </div>
         </div>
       </header>
-
       <div className="container mx-auto px-4 py-6 max-w-7xl">
         {!gameId ? (
           <GameSetup />
@@ -93,7 +92,6 @@ export default function GameTracker() {
           </>
         )}
       </div>
-
       <PlayerModal
         isOpen={showPlayerModal}
         onClose={() => setShowPlayerModal(false)}
