@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, jsonb, timestamp, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -28,6 +28,8 @@ export const players = pgTable("players", {
   blocks: integer("blocks").notNull().default(0),
   aces: integer("aces").notNull().default(0),
   errors: integer("errors").notNull().default(0),
+  serves: integer("serves").notNull().default(0),
+  servingEfficiency: real("serving_efficiency").notNull().default(0),
 });
 
 export const insertGameSchema = createInsertSchema(games).omit({
@@ -37,11 +39,12 @@ export const insertGameSchema = createInsertSchema(games).omit({
 
 export const insertPlayerSchema = createInsertSchema(players).omit({
   id: true,
+  servingEfficiency: true, // cannot be edited directly
 });
 
 export const updatePlayerStatsSchema = z.object({
   playerId: z.string(),
-  statType: z.enum(['kills', 'assists', 'digs', 'blocks', 'aces', 'errors']),
+  statType: z.enum(['kills', 'assists', 'digs', 'blocks', 'aces', 'errors', 'serves']),
   increment: z.boolean(),
 });
 
