@@ -333,7 +333,7 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
                     <div className="font-medium text-[#000000]">
                       Set {setNum}
                     </div>
-                    <div className={`font-bold ${isCurrentSet ? 'text-primary' : isCompleted ? 'text-primary' : 'text-gray-400'}`}>
+                    <div className="font-bold text-[#0022fa]">
                       {setData?.homeScore ?? (isCurrentSet ? game.homeScore : '-')}
                     </div>
                     <div className={`font-bold ${isCurrentSet ? 'text-secondary' : isCompleted ? 'text-secondary' : 'text-gray-400'}`}>
