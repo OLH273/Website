@@ -322,7 +322,7 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
                 return (
                   <div
                     key={setNum}
-                    className="p-2 rounded border-2 border-primary bg-[#bcc4e3]"
+                    className="p-2 rounded border-2 border-primary bg-[#bcc4e3] text-center text-[18px] font-normal pt-[10px] pb-[10px] pl-[6px] pr-[6px] ml-[2px] mr-[2px] mt-[8px] mb-[8px]"
                   >
                     <div className="font-medium text-[#000000]">
                       Set {setNum}
