@@ -303,7 +303,7 @@ export default function LiveScoreboard({ gameId, game }: LiveScoreboardProps) {
             
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="text-center">
-                <div className="text-2xl font-bold text-[08b2ff]">{game.homeTeamName}</div>
+                <div className="text-2xl font-bold text-[#0d00ff]">{game.homeTeamName}</div>
                 <div className="text-6xl font-bold text-gray-800">{game.homeScore}</div>
               </div>
               <div className="text-center">
