@@ -1,11 +1,7 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, jsonb, timestamp, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-
-// --- schema.ts ---
-
-import { pgTable, text, integer, real, varchar, boolean, jsonb, timestamp, sql } from "drizzle-orm/pg-core";
 
 export const games = pgTable("games", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -39,11 +35,6 @@ export const players = pgTable("players", {
 });
 
 
-// --- csvUpload.ts ---
-
-import Papa from "papaparse";
-import { db } from "./db"; // your drizzle client
-import { games, players } from "./schema";
 
 // Handles a CSV file input for loading a game
 export async function handleCsvUpload(file: File) {
