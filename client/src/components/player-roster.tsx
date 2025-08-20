@@ -51,7 +51,8 @@ export default function PlayerRoster({
       digs: 'text-secondary',
       blocks: 'text-purple-600',
       aces: 'text-success',
-      errors: 'text-error'
+      errors: 'text-error',
+      serves: 'text-yellow-600',
     };
     return colors[statType as keyof typeof colors] || 'text-gray-600';
   };
@@ -72,7 +73,7 @@ export default function PlayerRoster({
             <UserPlus className="h-4 w-4" />
           </Button>
         </div>
-        
+
         <div className="space-y-3 max-h-96 overflow-y-auto">
           {players.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
@@ -85,7 +86,8 @@ export default function PlayerRoster({
           ) : (
             players.map((player) => {
               const totalPoints = player.kills + player.assists + player.digs + player.blocks + player.aces;
-              
+              const servingEfficiency = player.serves > 0 ? ((player.aces / player.serves) * 100).toFixed(1) : "0";
+
               return (
                 <div key={player.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                   <div className="flex justify-between items-center mb-3">
@@ -99,9 +101,9 @@ export default function PlayerRoster({
                       <div className={`text-lg font-bold ${teamColor}`}>{totalPoints}</div>
                     </div>
                   </div>
-                  
-                  <div className="grid grid-cols-3 gap-2">
-                    {['kills', 'assists', 'digs'].map((statType) => (
+
+                  <div className="grid grid-cols-4 gap-2">
+                    {['kills', 'assists', 'digs', 'blocks', 'aces', 'errors', 'serves'].map((statType) => (
                       <div key={statType} className="text-center">
                         <div className="flex items-center justify-center space-x-1">
                           <Button
@@ -114,7 +116,7 @@ export default function PlayerRoster({
                             <Minus className="h-3 w-3" />
                           </Button>
                           <div className="flex-1 text-center">
-                            <div className="text-xs text-gray-600 capitalize">{statType}</div>
+                            <div className="text-xs text-gray-600 capitalize">{statType === 'serves' ? 'Serves' : statType}</div>
                             <div className={`text-lg font-bold ${getStatColor(statType)}`}>
                               {player[statType]}
                             </div>
@@ -132,38 +134,11 @@ export default function PlayerRoster({
                       </div>
                     ))}
                   </div>
-                  
-                  <div className="grid grid-cols-3 gap-2 mt-2">
-                    {['blocks', 'aces', 'errors'].map((statType) => (
-                      <div key={statType} className="text-center">
-                        <div className="flex items-center justify-center space-x-1">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleStatChange(player.id, statType, false)}
-                            disabled={updateStatsMutation.isPending || player[statType] <= 0}
-                            className="w-8 h-8 p-0 bg-red-100 text-red-600 hover:bg-red-200"
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <div className="flex-1 text-center">
-                            <div className="text-xs text-gray-600 capitalize">{statType}</div>
-                            <div className={`text-lg font-bold ${getStatColor(statType)}`}>
-                              {player[statType]}
-                            </div>
-                          </div>
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleStatChange(player.id, statType, true)}
-                            disabled={updateStatsMutation.isPending}
-                            className="w-8 h-8 p-0 bg-green-100 text-green-600 hover:bg-green-200"
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+
+                  <div className="mt-2 text-center">
+                    <span className="text-sm font-medium text-gray-700">
+                      Serving Efficiency: {servingEfficiency}%
+                    </span>
                   </div>
                 </div>
               );

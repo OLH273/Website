@@ -36,27 +36,77 @@ export default function GameSummary({ gameId, game, players }: GameSummaryProps)
     },
   });
 
+  // Export player stats as CSV
   const handleExportStats = () => {
     if (!game || !players) return;
 
-    const gameData = {
-      game,
-      players,
-      exportedAt: new Date().toISOString(),
-    };
+    const headers = [
+      "Player Name",
+      "Team",
+      "Kills",
+      "Assists",
+      "Digs",
+      "Blocks",
+      "Aces",
+      "Errors",
+    ];
 
-    const dataStr = JSON.stringify(gameData, null, 2);
-    const dataBlob = new Blob([dataStr], { type: 'application/json' });
-    const url = URL.createObjectURL(dataBlob);
-    const link = document.createElement('a');
+    const rows = players.map(p => [
+      p.name,
+      p.teamType,
+      p.kills,
+      p.assists,
+      p.digs,
+      p.blocks,
+      p.aces,
+      p.errors,
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(r => r.map(field => `"${field}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
     link.href = url;
-    link.download = `volleyball-stats-${game.homeTeamName}-vs-${game.awayTeamName}.json`;
+    link.download = `volleyball-stats-${game.homeTeamName}-vs-${game.awayTeamName}.csv`;
     link.click();
     URL.revokeObjectURL(url);
 
     toast({
       title: "Stats Exported",
-      description: "Game statistics have been exported successfully",
+      description: "Game statistics have been exported as CSV",
+    });
+  };
+
+  // Save game set scores as CSV
+  const handleSaveGame = () => {
+    if (!game || !game.sets) return;
+
+    const headers = ["Set Number", `${game.homeTeamName} Score`, `${game.awayTeamName} Score`];
+
+    const rows = game.sets.map((set: any, index: number) => [
+      index + 1,
+      set.homeScore,
+      set.awayScore,
+    ]);
+
+    const csvContent = [headers, ...rows]
+      .map(r => r.map(field => `"${field}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `volleyball-set-scores-${game.homeTeamName}-vs-${game.awayTeamName}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Game Saved",
+      description: "Set scores have been saved as CSV",
     });
   };
 
@@ -90,7 +140,7 @@ export default function GameSummary({ gameId, game, players }: GameSummaryProps)
     <Card className="shadow-lg mt-6">
       <CardContent className="p-6">
         <h2 className="text-xl font-bold text-gray-800 mb-4">Game Statistics Summary</h2>
-        
+
         <div className="grid md:grid-cols-2 gap-6">
           <div>
             <h3 className="text-lg font-semibold text-primary mb-3">{game.homeTeamName} Team Stats</h3>
@@ -113,7 +163,7 @@ export default function GameSummary({ gameId, game, players }: GameSummaryProps)
               </div>
             </div>
           </div>
-          
+
           <div>
             <h3 className="text-lg font-semibold text-secondary mb-3">{game.awayTeamName} Team Stats</h3>
             <div className="grid grid-cols-2 gap-4">
@@ -140,6 +190,7 @@ export default function GameSummary({ gameId, game, players }: GameSummaryProps)
         <div className="mt-6 flex justify-center space-x-4">
           <Button
             className="bg-success text-white hover:bg-green-600"
+            onClick={handleSaveGame}
           >
             <Save className="mr-2 h-4 w-4" />
             Save Game
