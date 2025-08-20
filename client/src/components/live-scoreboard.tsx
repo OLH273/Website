@@ -1,38 +1,22 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { getGameById } from '@/lib/fetchGame';
-import { db } from '@/lib/db';
-
-interface Game {
-  id: string;
-  home: string;
-  away: string;
-  sets: {
-    homeScore: number;
-    awayScore: number;
-    completed: boolean;
-  }[];
-}
+import { Game } from '@shared/schema';
 
 interface Props {
   gameId: string;
 }
 
 export default function LiveScoreboard({ gameId }: Props) {
-  const [game, setGame] = useState<Game | null>(null);
+  const { data: game, isLoading, error } = useQuery<Game>({
+    queryKey: ['/api/games', gameId],
+    enabled: !!gameId,
+  });
 
-  useEffect(() => {
-    const fetchGame = async () => {
-      const data = await getGameById(gameId);
-      setGame(data);
-    };
-    fetchGame();
-  }, [gameId]);
-
-  const exportToCSV = (game: Game | null) => {
-    if (!game) return;
+  const exportToCSV = (game: Game) => {
+    if (!game || !Array.isArray(game.sets)) return;
 
     const headers = ['Set', 'Home Score', 'Away Score', 'Completed'];
     const rows = game.sets.map((set, index) => [
@@ -56,13 +40,15 @@ export default function LiveScoreboard({ gameId }: Props) {
     document.body.removeChild(link);
   };
 
-  if (!game) return <p>Loading...</p>;
+  if (isLoading) return <p>Loading...</p>;
+  if (error) return <p>Error loading game data</p>;
+  if (!game) return <p>Game not found</p>;
 
   return (
     <div className="space-y-4 p-4">
-      <h2 className="text-xl font-bold">{game.home} vs {game.away}</h2>
+      <h2 className="text-xl font-bold">{game.homeTeamName} vs {game.awayTeamName}</h2>
       <div className="space-y-2">
-        {game.sets.map((set, index) => (
+        {Array.isArray(game.sets) && game.sets.map((set, index) => (
           <div key={index} className="flex justify-between bg-gray-100 p-2 rounded">
             <span>Set {index + 1}</span>
             <span>{set.homeScore} - {set.awayScore}</span>
