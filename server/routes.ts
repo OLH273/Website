@@ -9,7 +9,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Game routes
   app.post("/api/games", async (req, res) => {
     try {
+      console.log("body incoming", req.body)
       const gameData = insertGameSchema.parse(req.body);
+      console.log("game data", gameData)
       const game = await storage.createGame(gameData);
       res.json(game);
     } catch (error) {

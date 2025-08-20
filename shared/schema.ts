@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp, boolean, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+// --- schema.ts ---
+
+import { pgTable, text, integer, real, varchar, boolean, jsonb, timestamp, sql } from "drizzle-orm/pg-core";
 
 export const games = pgTable("games", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -22,15 +26,77 @@ export const players = pgTable("players", {
   jerseyNumber: integer("jersey_number").notNull(),
   name: text("name").notNull(),
   position: text("position").notNull(),
-  kills: integer("kills").notNull().default(0),
-  assists: integer("assists").notNull().default(0),
-  digs: integer("digs").notNull().default(0),
-  blocks: integer("blocks").notNull().default(0),
-  aces: integer("aces").notNull().default(0),
-  errors: integer("errors").notNull().default(0),
-  serves: integer("serves").notNull().default(0),
-  servingEfficiency: real("serving_efficiency").notNull().default(0),
+
+  // Stats (taken from CSV, no default values)
+  kills: integer("kills"),
+  assists: integer("assists"),
+  digs: integer("digs"),
+  blocks: integer("blocks"),
+  aces: integer("aces"),
+  errors: integer("errors"),
+  serves: integer("serves"),
+  servingEfficiency: real("serving_efficiency"), // stays null if not set
 });
+
+
+// --- csvUpload.ts ---
+
+import Papa from "papaparse";
+import { db } from "./db"; // your drizzle client
+import { games, players } from "./schema";
+
+// Handles a CSV file input for loading a game
+export async function handleCsvUpload(file: File) {
+  return new Promise((resolve, reject) => {
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const rows = results.data; // array of player rows
+
+          if (rows.length === 0) throw new Error("Empty CSV");
+
+          // --- Create game using team names ---
+          const homeTeam = rows.find((row: any) => row.Team?.toLowerCase() === "home")?.Team || "Home";
+          const awayTeam = rows.find((row: any) => row.Team?.toLowerCase() === "away")?.Team || "Away";
+
+          const game = await db.insert(games).values({
+            homeTeamName: homeTeam,
+            awayTeamName: awayTeam,
+          }).returning();
+
+          const gameId = game[0].id;
+
+          // --- Insert players ---
+          for (const row of rows) {
+            await db.insert(players).values({
+              gameId,
+              teamType: row.Team?.toLowerCase() === "home" ? "home" : "away",
+              jerseyNumber: 0, // Could extend CSV to include numbers
+              name: row["Player Name"],
+              position: "unknown", // Could extend CSV to include positions
+              kills: parseInt(row.Kills || "0", 10),
+              assists: parseInt(row.Assists || "0", 10),
+              digs: parseInt(row.Digs || "0", 10),
+              blocks: parseInt(row.Blocks || "0", 10),
+              aces: parseInt(row.Aces || "0", 10),
+              errors: parseInt(row.Errors || "0", 10),
+              serves: parseInt(row.Serves || "0", 10),
+              servingEfficiency: null, // left empty since we aren’t calculating
+            });
+          }
+
+          resolve(gameId);
+        } catch (err) {
+          reject(err);
+        }
+      },
+      error: (err) => reject(err),
+    });
+  });
+}
+
 
 export const insertGameSchema = createInsertSchema(games).omit({
   id: true,
@@ -39,12 +105,11 @@ export const insertGameSchema = createInsertSchema(games).omit({
 
 export const insertPlayerSchema = createInsertSchema(players).omit({
   id: true,
-  servingEfficiency: true, // cannot be edited directly
 });
 
 export const updatePlayerStatsSchema = z.object({
   playerId: z.string(),
-  statType: z.enum(['kills', 'assists', 'digs', 'blocks', 'aces', 'errors', 'serves']),
+  statType: z.enum(['kills', 'assists', 'digs', 'blocks', 'aces', 'errors']),
   increment: z.boolean(),
 });
 

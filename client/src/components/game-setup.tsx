@@ -1,24 +1,24 @@
-import { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Play, Upload } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function GameSetup() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [homeTeamName, setHomeTeamName] = useState("");
   const [awayTeamName, setAwayTeamName] = useState("");
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const fileInputRef = useRef(null);
 
   // Mutation to create a new game
   const createGameMutation = useMutation({
-    mutationFn: async (data: { homeTeamName: string; awayTeamName: string }) => {
+    mutationFn: async (data) => {
       const response = await apiRequest("POST", "/api/games", data);
       return response.json();
     },
@@ -38,38 +38,7 @@ export default function GameSetup() {
     },
   });
 
-  // Mutation to upload an existing game file
-  const uploadGameMutation = useMutation({
-    mutationFn: async (file: File) => {
-      const formData = new FormData();
-      formData.append("file", file);
-
-      const response = await fetch("/api/games/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to upload file");
-      }
-      return response.json();
-    },
-    onSuccess: (game) => {
-      toast({
-        title: "Game Loaded",
-        description: "Existing game has been loaded successfully",
-      });
-      setLocation(`/game/${game.id}`);
-    },
-    onError: () => {
-      toast({
-        title: "Error",
-        description: "Failed to load game",
-        variant: "destructive",
-      });
-    },
-  });
-
+  // Handle Start Game button
   const handleStartGame = () => {
     if (!homeTeamName.trim() || !awayTeamName.trim()) {
       toast({
@@ -86,23 +55,105 @@ export default function GameSetup() {
     });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      setSelectedFile(e.target.files[0]);
+  // Handle Load Game button
+  const handleLoadGameClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
-  const handleUploadGame = () => {
-    if (!selectedFile) {
+  // Handle file selection
+  const handleFileChange = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!file.name.endsWith(".csv")) {
       toast({
-        title: "No File Selected",
-        description: "Please select a file to upload",
+        title: "Invalid file",
+        description: "Please upload a CSV file",
         variant: "destructive",
       });
       return;
     }
-    uploadGameMutation.mutate(selectedFile);
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const text = e.target.result;
+
+        // Split into rows, trim whitespace, remove empty rows
+        const rows = text
+          .split("\n")
+          .map((row) => row.trim())
+          .filter((row) => row.length > 0);
+
+        if (rows.length < 2) throw new Error("CSV must contain header + at least one player");
+
+        // Parse header
+        const headers = rows[0]
+          .replace(/"/g, "") // remove quotes
+          .split(",")
+          .map((h) => h.trim());
+
+        // Expected headers
+        const expected = ["Player Name", "Team", "Kills", "Assists", "Digs", "Blocks", "Aces", "Errors"];
+        const valid = expected.every((h, i) => headers[i] && headers[i].toLowerCase() === h.toLowerCase());
+        if (!valid) throw new Error("CSV headers are invalid");
+
+        // Parse players
+        const homePlayers = [];
+        const awayPlayers = [];
+
+        for (let i = 1; i < rows.length; i++) {
+          const cols = rows[i].replace(/"/g, "").split(",").map((c) => c.trim());
+          if (cols.length !== headers.length) continue; // skip malformed row
+
+          const player = {
+            name: cols[0],
+            team: cols[1].toLowerCase(),
+            kills: Number(cols[2]),
+            assists: Number(cols[3]),
+            digs: Number(cols[4]),
+            blocks: Number(cols[5]),
+            aces: Number(cols[6]),
+            errors: Number(cols[7]),
+          };
+
+          if (player.team === "home") homePlayers.push(player);
+          else if (player.team === "away") awayPlayers.push(player);
+        }
+
+        if (!homePlayers.length || !awayPlayers.length) {
+          throw new Error("CSV must contain at least one player for each team");
+        }
+
+        // Create game, keeping scores intact
+        const game = await apiRequest("POST", "/api/games", {
+          homeTeamName: "Home", // could also grab from UI input
+          awayTeamName: "Away",
+          homePlayers,
+          awayPlayers,
+        }).then((res) => res.json());
+
+        toast({
+          title: "Game Loaded",
+          description: "CSV file loaded successfully with players + stats",
+        });
+
+        setLocation(`/game/${game.id}`);
+      } catch (error) {
+        console.error("CSV Parse Error:", error);
+        toast({
+          title: "Error",
+          description: "Failed to load CSV file",
+          variant: "destructive",
+        });
+      }
+    };
+
+    reader.readAsText(file);
   };
+
 
   return (
     <Card className="shadow-lg">
@@ -130,9 +181,8 @@ export default function GameSetup() {
             />
           </div>
         </div>
-
-        <div className="mt-4 flex space-x-4 items-center">
-          <Button 
+        <div className="mt-4 flex space-x-4">
+          <Button
             onClick={handleStartGame}
             disabled={createGameMutation.isPending}
             className="bg-primary text-white hover:bg-blue-700"
@@ -140,31 +190,22 @@ export default function GameSetup() {
             <Play className="mr-2 h-4 w-4" />
             {createGameMutation.isPending ? "Creating..." : "Start New Game"}
           </Button>
-
-          {/* File Upload Section */}
+          <Button
+            onClick={handleLoadGameClick}
+            variant="outline"
+            className="border-gray-300 text-gray-700 hover:bg-gray-50"
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Load Game
+          </Button>
+          {/* Hidden file input */}
           <input
+            ref={fileInputRef}
             type="file"
-            accept=".json,.csv"
-            id="game-upload"
-            className="hidden"
+            accept=".csv"
+            style={{ display: "none" }}
             onChange={handleFileChange}
           />
-          <label htmlFor="game-upload">
-            <div className="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 cursor-pointer border-gray-300 text-gray-700 hover:bg-gray-50">
-              <Upload className="mr-2 h-4 w-4" />
-              {selectedFile ? selectedFile.name : "Load Game"}
-            </div>
-          </label>
-
-          {selectedFile && (
-            <Button
-              onClick={handleUploadGame}
-              disabled={uploadGameMutation.isPending}
-              className="bg-green-500 text-white hover:bg-green-600"
-            >
-              {uploadGameMutation.isPending ? "Uploading..." : "Upload"}
-            </Button>
-          )}
         </div>
       </CardContent>
     </Card>
