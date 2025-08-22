@@ -1,127 +1,126 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, integer, jsonb, timestamp, boolean } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
-import { z } from "zod";
+// ==========================
+// FRONTEND (React Component)
+// ==========================
+import React from "react";
+import { toast } from "@/components/ui/use-toast"; // adjust import if needed
+import { useNavigate } from "react-router-dom"; // or use Next.js router
 
-// drizzle schema setup
-import { pgTable, text, varchar, integer, boolean, timestamp, jsonb, real } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm"; // ✅ fix #1: sql import
-import Papa from "papaparse"; // for parsing CSV
-import { db } from "./db"; // ✅ make sure you have a drizzle client here
+export default function FileUpload() {
+  const navigate = useNavigate();
 
-// games table
-export const games = pgTable("games", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  homeTeamName: text("home_team_name").notNull(),
-  awayTeamName: text("away_team_name").notNull(),
-  currentSet: integer("current_set").notNull().default(1),
-  homeScore: integer("home_score").notNull().default(0),
-  awayScore: integer("away_score").notNull().default(0),
-  sets: jsonb("sets").notNull().default([]),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at").notNull().defaultNow(),
-});
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-// players table
-export const players = pgTable("players", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  gameId: varchar("game_id").notNull(),
-  teamType: text("team_type").notNull(), // 'home' or 'away'
-  jerseyNumber: integer("jersey_number").notNull().default(0),
-  name: text("name").notNull(),
-  position: text("position").default("Unknown"), // ✅ avoid errors if CSV doesn’t have it
-  kills: integer("kills").notNull().default(0),
-  assists: integer("assists").notNull().default(0),
-  digs: integer("digs").notNull().default(0),
-  blocks: integer("blocks").notNull().default(0),
-  aces: integer("aces").notNull().default(0),
-  errors: integer("errors").notNull().default(0),
-  serves: integer("serves").notNull().default(0),
-  servingEfficiency: real("serving_efficiency").notNull().default(0),
-});
+    if (!file.name.endsWith(".csv")) {
+      toast({
+        title: "Invalid file",
+        description: "Please upload a CSV file",
+        variant: "destructive",
+      });
+      return;
+    }
 
-// ✅ CSV upload + insert into DB
-export async function handleCsvUpload(file) {
-  return new Promise((resolve, reject) => {
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: async (results) => {
-        try {
-          const rows = results.data;
+    const formData = new FormData();
+    formData.append("file", file);
 
-          if (!rows || rows.length === 0) {
-            throw new Error("CSV file is empty or invalid");
-          }
+    try {
+      const res = await fetch("/api/upload-players", {
+        method: "POST",
+        body: formData,
+      });
 
-          // ✅ Create game using team names from first row
-          const homeTeamName = rows.find((row) => row.Team?.toLowerCase() === "home")?.Team || "Home";
-          const awayTeamName = rows.find((row) => row.Team?.toLowerCase() === "away")?.Team || "Away";
+      if (!res.ok) throw new Error("Failed to upload");
 
-          const game = await db
-            .insert(games)
-            .values({
-              homeTeamName,
-              awayTeamName,
-            })
-            .returning();
+      const data = await res.json();
 
-          const gameId = game[0]?.id;
-          if (!gameId) throw new Error("Game creation failed");
+      toast({
+        title: "Players Imported",
+        description: `${data.count} players loaded successfully`,
+      });
 
-          // ✅ Insert players with stats from CSV
-          for (const row of rows) {
-            await db.insert(players).values({
-              gameId,
-              teamType: row.Team?.toLowerCase() || "home",
-              jerseyNumber: 0, // CSV doesn’t have jersey number
-              name: row["Player Name"] || "Unknown Player",
-              position: row.Position || "Unknown",
-              kills: parseInt(row.Kills || 0, 10),
-              assists: parseInt(row.Assists || 0, 10),
-              digs: parseInt(row.Digs || 0, 10),
-              blocks: parseInt(row.Blocks || 0, 10),
-              aces: parseInt(row.Aces || 0, 10),
-              errors: parseInt(row.Errors || 0, 10),
-              serves: parseInt(row.Serves || 0, 10),
-            });
-          }
+      navigate(`/game/${data.gameId}`);
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
+    }
+  };
 
-          resolve({ success: true, gameId });
-        } catch (err) {
-          reject(err);
-        }
-      },
-      error: (err) => reject(err),
-    });
-  });
+  return (
+    <input
+      type="file"
+      accept=".csv"
+      onChange={handleFileChange}
+      className="hidden"
+      id="fileInput"
+    />
+  );
 }
 
 
-export const insertGameSchema = createInsertSchema(games).omit({
-  id: true,
-  createdAt: true,
-});
+// ==========================
+// BACKEND (Next.js API Route)
+// File: /pages/api/upload-players.ts
+// ==========================
+import { NextApiRequest, NextApiResponse } from "next";
+import formidable from "formidable";
+import fs from "fs";
+import csv from "csv-parser";
+import { db } from "@/db"; // your drizzle db connection
+import { players } from "@/db/schema";
 
-export const insertPlayerSchema = createInsertSchema(players).omit({
-  id: true,
-});
+// Disable Next.js body parser (required for file uploads)
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
-export const updatePlayerStatsSchema = z.object({
-  playerId: z.string(),
-  statType: z.enum(['kills', 'assists', 'digs', 'blocks', 'aces', 'errors']),
-  increment: z.boolean(),
-});
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
 
-export const updateScoreSchema = z.object({
-  gameId: z.string(),
-  teamType: z.enum(['home', 'away']),
-  points: z.number().min(0),
-});
+  const form = formidable({ multiples: false });
 
-export type InsertGame = z.infer<typeof insertGameSchema>;
-export type Game = typeof games.$inferSelect;
-export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
-export type Player = typeof players.$inferSelect;
-export type UpdatePlayerStats = z.infer<typeof updatePlayerStatsSchema>;
-export type UpdateScore = z.infer<typeof updateScoreSchema>;
+  form.parse(req, async (err, fields, files) => {
+    if (err) {
+      return res.status(500).json({ error: "File upload failed" });
+    }
+
+    const file = files.file as formidable.File;
+    const gameId = fields.gameId?.toString() || "some-game-id"; // pass in from frontend if needed
+
+    const playerRows: any[] = [];
+
+    fs.createReadStream(file.filepath)
+      .pipe(csv())
+      .on("data", (row) => {
+        playerRows.push({
+          gameId,
+          teamType: row["Team"].toLowerCase(), // expects "home" or "away"
+          jerseyNumber: 0, // update if CSV includes this
+          name: row["Player Name"],
+          position: row["Position"] || "Unknown",
+          kills: parseInt(row["Kills"] || "0", 10),
+          assists: parseInt(row["Assists"] || "0", 10),
+          digs: parseInt(row["Digs"] || "0", 10),
+          blocks: parseInt(row["Blocks"] || "0", 10),
+          aces: parseInt(row["Aces"] || "0", 10),
+          errors: parseInt(row["Errors"] || "0", 10),
+        });
+      })
+      .on("end", async () => {
+        await db.insert(players).values(playerRows);
+
+        res.status(200).json({
+          message: "Players imported successfully",
+          count: playerRows.length,
+          gameId,
+        });
+      });
+  });
+}
