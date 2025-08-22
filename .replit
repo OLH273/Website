@@ -40,3 +40,12 @@ waitForPort = 5000
 
 [agent]
 integrations = ["javascript_mem_db==1.0.0"]
+
+[rules]
+
+[rules.formatter]
+
+[rules.formatter.fileExtensions]
+
+[rules.formatter.fileExtensions.".ts"]
+id = "module:nodejs-20/formatter:prettier"
