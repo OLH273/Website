@@ -1,11 +1,11 @@
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import { useLocation } from "wouter";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Play, Upload } from "lucide-react";
+import { Play } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -14,7 +14,6 @@ export default function GameSetup() {
   const { toast } = useToast();
   const [homeTeamName, setHomeTeamName] = useState("");
   const [awayTeamName, setAwayTeamName] = useState("");
-  const fileInputRef = useRef(null);
 
   // Mutation to create a new game
   const createGameMutation = useMutation({
@@ -55,106 +54,6 @@ export default function GameSetup() {
     });
   };
 
-  // Handle Load Game button
-  const handleLoadGameClick = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
-  };
-
-  // Handle file selection
-  const handleFileChange = (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    if (!file.name.endsWith(".csv")) {
-      toast({
-        title: "Invalid file",
-        description: "Please upload a CSV file",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const text = e.target.result;
-
-        // Split into rows, trim whitespace, remove empty rows
-        const rows = text
-          .split("\n")
-          .map((row) => row.trim())
-          .filter((row) => row.length > 0);
-
-        if (rows.length < 2) throw new Error("CSV must contain header + at least one player");
-
-        // Parse header
-        const headers = rows[0]
-          .replace(/"/g, "") // remove quotes
-          .split(",")
-          .map((h) => h.trim());
-
-        // Expected headers
-        const expected = ["Player Name", "Team", "Kills", "Assists", "Digs", "Blocks", "Aces", "Errors"];
-        const valid = expected.every((h, i) => headers[i] && headers[i].toLowerCase() === h.toLowerCase());
-        if (!valid) throw new Error("CSV headers are invalid");
-
-        // Parse players
-        const homePlayers = [];
-        const awayPlayers = [];
-
-        for (let i = 1; i < rows.length; i++) {
-          const cols = rows[i].replace(/"/g, "").split(",").map((c) => c.trim());
-          if (cols.length !== headers.length) continue; // skip malformed row
-
-          const player = {
-            name: cols[0],
-            team: cols[1].toLowerCase(),
-            kills: Number(cols[2]),
-            assists: Number(cols[3]),
-            digs: Number(cols[4]),
-            blocks: Number(cols[5]),
-            aces: Number(cols[6]),
-            errors: Number(cols[7]),
-          };
-
-          if (player.team === "home") homePlayers.push(player);
-          else if (player.team === "away") awayPlayers.push(player);
-        }
-
-        if (!homePlayers.length || !awayPlayers.length) {
-          throw new Error("CSV must contain at least one player for each team");
-        }
-
-        // Create game, keeping scores intact
-        const game = await apiRequest("POST", "/api/games", {
-          homeTeamName: "Home", // could also grab from UI input
-          awayTeamName: "Away",
-          homePlayers,
-          awayPlayers,
-        }).then((res) => res.json());
-
-        toast({
-          title: "Game Loaded",
-          description: "CSV file loaded successfully with players + stats",
-        });
-
-        setLocation(`/game/${game.id}`);
-      } catch (error) {
-        console.error("CSV Parse Error:", error);
-        toast({
-          title: "Error",
-          description: "Failed to load CSV file",
-          variant: "destructive",
-        });
-      }
-    };
-
-    reader.readAsText(file);
-  };
-
-
   return (
     <Card className="shadow-lg">
       <CardContent className="p-6">
@@ -190,22 +89,6 @@ export default function GameSetup() {
             <Play className="mr-2 h-4 w-4" />
             {createGameMutation.isPending ? "Creating..." : "Start New Game"}
           </Button>
-          <Button
-            onClick={handleLoadGameClick}
-            variant="outline"
-            className="border-gray-300 text-gray-700 hover:bg-gray-50"
-          >
-            <Upload className="mr-2 h-4 w-4" />
-            Load Game
-          </Button>
-          {/* Hidden file input */}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv"
-            style={{ display: "none" }}
-            onChange={handleFileChange}
-          />
         </div>
       </CardContent>
     </Card>
